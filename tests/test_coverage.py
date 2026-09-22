@@ -9,6 +9,10 @@ SF:/src/a.cpp
 DA:1,3
 DA:2,0
 DA:4,1
+BRDA:1,0,0,3
+BRDA:1,0,1,0
+BRDA:2,0,0,-
+BRDA:2,0,1,-
 end_of_record
 SF:/src/b.cpp
 DA:1,0
@@ -20,7 +24,10 @@ LLVM_JSON = """
  [1, 15, 3, true, true, false],
  [2, 10, 0, true, true, false],
  [4, 4, 3, true, false, false],
- [6, 2, 0, false, false, false]]}]}]}
+ [6, 2, 0, false, false, false]],
+ "branches": [[2, 9, 2, 14, 3, 0, 0, 0, 4]],
+ "expansions": [{"source_region": [5, 3, 5, 20, 3, 0, 0, 0],
+                 "branches": [[90, 1, 90, 9, 1, 1, 0, 0, 4]]}]}]}]}
 """
 
 COBERTURA = """<?xml version="1.0"?>
@@ -62,24 +69,60 @@ class ParseTest(unittest.TestCase):
             coverage.parse("not coverage data")
 
 
+class BranchTest(unittest.TestCase):
+    def test_lcov_outcomes(self):
+        data = coverage.parse(LCOV)
+        self.assertTrue(data.has_branches)
+        self.assertEqual(data.branches_for("/src/a.cpp"), {1: (1, 2), 2: (0, 2)})
+
+    def test_llvm_json_counts_both_outcomes_and_expansions(self):
+        data = coverage.parse(LLVM_JSON)
+        self.assertEqual(data.branches_for("/src/a.cpp"), {2: (1, 2), 5: (2, 2)})
+
+    def test_cobertura_conditions(self):
+        text = COBERTURA.replace('<line number="2" hits="0"/>',
+                                 '<line number="2" hits="0" branch="true" '
+                                 'condition-coverage="50% (1/2)"/>')
+        self.assertEqual(coverage.parse(text).branches_for("/src/a.cpp"), {2: (1, 2)})
+
+    def test_gcov_branch_lines(self):
+        text = GCOV + "branch  0 taken 4\nbranch  1 never executed\n"
+        self.assertEqual(coverage.parse(text, "a.cpp.gcov").branches_for("/src/a.cpp"), {4: (1, 2)})
+
+    def test_data_without_branches(self):
+        self.assertFalse(coverage.parse(GCOV, "a.cpp.gcov").has_branches)
+
+    def test_branch_range_coverage(self):
+        data = coverage.parse(LCOV)
+        self.assertEqual(data.range_coverage("/src/a.cpp", 1, 2, "branch"), (0.25, "branch"))
+
+    def test_branchless_range_falls_back_to_lines(self):
+        data = coverage.parse(LCOV)
+        self.assertEqual(data.range_coverage("/src/a.cpp", 4, 4, "branch"), (1.0, "line"))
+
+    def test_merge_adds_outcomes(self):
+        data = coverage.parse(LCOV).merge(coverage.parse(LCOV))
+        self.assertEqual(data.branches_for("/src/a.cpp")[1], (2, 4))
+
+
 class LookupTest(unittest.TestCase):
     def test_range_coverage(self):
         data = coverage.parse(LCOV)
-        self.assertEqual(data.range_coverage("/src/a.cpp", 1, 4), 2 / 3)
-        self.assertEqual(data.range_coverage("/src/a.cpp", 2, 2), 0.0)
+        self.assertEqual(data.range_coverage("/src/a.cpp", 1, 4), (2 / 3, "line"))
+        self.assertEqual(data.range_coverage("/src/a.cpp", 2, 2), (0.0, "line"))
         self.assertIsNone(data.range_coverage("/src/a.cpp", 10, 20))
         self.assertIsNone(data.range_coverage("/src/missing.cpp", 1, 4))
 
     def test_matches_by_path_suffix(self):
         data = coverage.parse("SF:/build/../src/a.cpp\nDA:1,1\nend_of_record\n")
-        self.assertEqual(data.range_coverage("src/a.cpp", 1, 1), 1.0)
+        self.assertEqual(data.range_coverage("src/a.cpp", 1, 1).value, 1.0)
 
     def test_prefers_longest_matching_suffix(self):
         data = coverage.parse(
             "SF:/one/lib/a.cpp\nDA:1,1\nend_of_record\n"
             "SF:/two/lib/a.cpp\nDA:1,0\nend_of_record\n"
         )
-        self.assertEqual(data.range_coverage("/two/lib/a.cpp", 1, 1), 0.0)
+        self.assertEqual(data.range_coverage("/two/lib/a.cpp", 1, 1).value, 0.0)
 
     def test_merge_sums_hits(self):
         data = coverage.parse(LCOV).merge(coverage.parse("SF:/src/a.cpp\nDA:2,5\nend_of_record\n"))
@@ -90,7 +133,7 @@ class LookupTest(unittest.TestCase):
             with open(os.path.join(directory, "run.info"), "w") as handle:
                 handle.write(LCOV)
             data = coverage.load(directory)
-        self.assertEqual(data.range_coverage("/src/a.cpp", 1, 1), 1.0)
+        self.assertEqual(data.range_coverage("/src/a.cpp", 1, 1).value, 1.0)
 
 
 if __name__ == "__main__":

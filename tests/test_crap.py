@@ -56,10 +56,6 @@ class AssessTest(unittest.TestCase):
         self.assertEqual(results[0].coverage, 0.0)
         self.assertTrue(results[0].crappy)
 
-    def test_skip_unmeasured(self):
-        results = assess([function("orphan", 6, path="/src/zz.cpp")], self.data, 30, True)
-        self.assertEqual(results, [])
-
     def test_advice_demands_coverage_when_reachable(self):
         results = assess([function("big", 14)], self.data, 30)
         self.assertIn("cover 57% of its lines (now 50%)", results[0].advice())

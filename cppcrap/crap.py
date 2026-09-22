@@ -29,6 +29,7 @@ class Assessment:
     coverage: float
     measured: bool
     threshold: float
+    kind: str = None
 
     @property
     def score(self):
@@ -59,20 +60,19 @@ class Assessment:
         )
 
 
-def assess(functions, coverage_data, threshold=DEFAULT_THRESHOLD, skip_unmeasured=False):
+def assess(functions, coverage_data, threshold=DEFAULT_THRESHOLD, kind="line"):
     assessments = []
     for function in functions:
         measured = coverage_data.range_coverage(
-            function.path, function.start_line, function.end_line
+            function.path, function.start_line, function.end_line, kind
         )
-        if measured is None and skip_unmeasured:
-            continue
         assessments.append(
             Assessment(
                 function=function,
-                coverage=measured if measured is not None else 0.0,
+                coverage=measured.value if measured else 0.0,
                 measured=measured is not None,
                 threshold=threshold,
+                kind=measured.kind if measured else None,
             )
         )
     assessments.sort(key=lambda item: (-item.score, item.function.path, item.function.start_line))

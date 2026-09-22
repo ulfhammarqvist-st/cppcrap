@@ -30,6 +30,9 @@ def build_parser():
     parser.add_argument("-t", "--threshold", type=float, default=DEFAULT_THRESHOLD,
                         help="score above which a function counts as crap (default: %(default)s)")
     parser.add_argument("-f", "--format", choices=("text", "json", "csv"), default="text")
+    parser.add_argument("--coverage-kind", choices=("auto", "line", "branch"), default="auto",
+                        help="which coverage to weigh complexity against; auto picks branch "
+                             "coverage when the report carries it (default: %(default)s)")
     parser.add_argument("--top", type=int, default=25, help="rows to print (default: %(default)s)")
     parser.add_argument("--all", action="store_true", help="print every function")
     parser.add_argument("--exclude", action="append", default=[], metavar="GLOB")
@@ -82,7 +85,17 @@ def main(argv=None):
             if function.complexity >= args.min_complexity
         )
 
-    assessments = assess(functions, data, args.threshold)
+    kind = args.coverage_kind
+    if kind == "auto":
+        kind = "branch" if data.has_branches else "line"
+    if kind == "branch" and not data.has_branches:
+        return fail(
+            "asked for branch coverage but the report carries none.",
+            "Re-run coverage with branch data (llvm-cov export, lcov --rc branch_coverage=1,",
+            "gcov -b) or pass --coverage-kind line.",
+        )
+
+    assessments = assess(functions, data, args.threshold, kind)
     if args.coverage and not any(item.measured for item in assessments):
         return fail(
             f"the coverage data matches none of the {len(assessments)} functions found.",
@@ -94,12 +107,14 @@ def main(argv=None):
     root = os.getcwd()
     top = len(assessments) if args.all else args.top
     if args.format == "json":
-        sys.stdout.write(report.render_json(assessments, args.threshold, root))
+        sys.stdout.write(report.render_json(assessments, args.threshold, root, kind))
     elif args.format == "csv":
         sys.stdout.write(report.render_csv(assessments, args.threshold, root))
     else:
         color = not args.no_color and sys.stdout.isatty()
-        sys.stdout.write(report.render_text(assessments, args.threshold, top, color, root, args.all))
+        sys.stdout.write(
+            report.render_text(assessments, args.threshold, top, color, root, args.all, kind)
+        )
 
     if args.exit_zero:
         return 0

@@ -18,15 +18,16 @@ def summarise(assessments, threshold):
         "functions": len(assessments),
         "crappy": len(crappy),
         "unmeasured": len(unmeasured),
+        "branch_measured": sum(1 for item in assessments if item.kind == "branch"),
         "worst": max((item.score for item in assessments), default=0.0),
         "debt": sum(item.score - threshold for item in crappy),
         "threshold": threshold,
     }
 
 
-def render_text(assessments, threshold, top=25, color=False, root=".", show_all=False):
+def render_text(assessments, threshold, top=25, color=False, root=".", show_all=False, kind="line"):
     paint = _painter(color)
-    lines = [paint(BOLD, f"CRAP report  (threshold {threshold:g})"), ""]
+    lines = [paint(BOLD, f"CRAP report  (threshold {threshold:g}, {kind} coverage)"), ""]
     shown = assessments if show_all else ([item for item in assessments if item.crappy] or assessments)
     hidden = max(0, len(shown) - top)
     shown = shown[:top]
@@ -54,6 +55,9 @@ def render_text(assessments, threshold, top=25, color=False, root=".", show_all=
         f"{paint(RED if summary['crappy'] else GREEN, str(summary['crappy']) + ' crappy')}, "
         f"worst {summary['worst']:.1f}, debt {summary['debt']:.1f}"
     )
+    if kind == "branch" and summary["branch_measured"] < summary["functions"] - summary["unmeasured"]:
+        fell_back = summary["functions"] - summary["unmeasured"] - summary["branch_measured"]
+        lines.append(paint(DIM, f"  {fell_back} functions have no branches; scored on line coverage"))
     if summary["unmeasured"]:
         lines.append(
             paint(DIM, f"  {summary['unmeasured']} functions had no coverage data (counted as 0%)")
@@ -61,9 +65,9 @@ def render_text(assessments, threshold, top=25, color=False, root=".", show_all=
     return "\n".join(lines) + "\n"
 
 
-def render_json(assessments, threshold, root="."):
+def render_json(assessments, threshold, root=".", kind="line"):
     payload = {
-        "summary": summarise(assessments, threshold),
+        "summary": dict(summarise(assessments, threshold), coverage_kind=kind),
         "functions": [_row(item, root) for item in assessments],
     }
     return json.dumps(payload, indent=2) + "\n"
@@ -88,6 +92,7 @@ def _row(item, root):
         "function": function.name,
         "complexity": function.complexity,
         "coverage": round(item.coverage, 4) if item.measured else None,
+        "coverage_kind": item.kind,
         "crap": round(item.score, 2),
         "crappy": item.crappy,
         "advice": item.advice(),

@@ -129,6 +129,31 @@ class CliTest(unittest.TestCase):
         rows = json.loads(out)["functions"]
         self.assertEqual([row["function"] for row in rows], ["tangle"])
 
+    def test_branch_coverage_is_used_when_available(self):
+        self.write("branchy.info", lcov(self.source, {3, 4, 16}, range(2, 17)).replace(
+            "end_of_record", "BRDA:3,0,0,1\nBRDA:3,0,1,0\nBRDA:5,0,0,-\nBRDA:5,0,1,-\nend_of_record"))
+        _, out, _ = self.run_cli("src", "-c", "branchy.info", "--format", "json")
+        rows = {row["function"]: row for row in json.loads(out)["functions"]}
+        self.assertEqual(json.loads(out)["summary"]["coverage_kind"], "branch")
+        self.assertEqual(rows["tangle"]["coverage_kind"], "branch")
+        self.assertEqual(rows["tangle"]["coverage"], 0.25)
+        self.assertEqual(rows["trivial"]["coverage_kind"], "line")
+        self.assertEqual(rows["trivial"]["coverage"], 1.0)
+
+    def test_line_coverage_can_be_forced(self):
+        _, out, _ = self.run_cli("src", "-c", self.coverage, "--format", "json",
+                                 "--coverage-kind", "line")
+        self.assertEqual(json.loads(out)["summary"]["coverage_kind"], "line")
+
+    def test_branch_coverage_without_branch_data_is_an_error(self):
+        code, _, err = self.run_cli("src", "-c", self.coverage, "--coverage-kind", "branch")
+        self.assertEqual(code, 2)
+        self.assertIn("carries none", err)
+
+    def test_text_report_names_the_coverage_kind(self):
+        _, out, _ = self.run_cli("src", "-c", self.coverage, "--no-color")
+        self.assertIn("line coverage", out)
+
     def test_broken_coverage_file_is_an_error(self):
         self.write("junk.info", "definitely not coverage")
         code, _, err = self.run_cli("src", "-c", "junk.info")

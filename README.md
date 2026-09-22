@@ -62,11 +62,14 @@ exports `coverage.info`. It passes the instrumentation as global flags rather th
 project's own coverage option, because a project that adds `--coverage` after `add_subdirectory()`
 leaves those targets linking instrumented libraries without the runtime.
 
+`llvm-cov export` carries branch data. With gcc, ask for it: `gcov -b`, or
+`lcov -c --rc branch_coverage=1`.
+
 gcc:
 
 ```sh
 g++ --coverage -O0 -g -o tests ...
-./tests && gcov *.gcda           # or: lcov -c -d . -o coverage.info
+./tests && gcov -b *.gcda        # or: lcov -c --rc branch_coverage=1 -d . -o coverage.info
 ```
 
 ### CI
@@ -87,6 +90,7 @@ raise the threshold until the build is green, then ratchet it down.
 | `-c, --coverage PATH` | coverage file or directory, repeatable |
 | `-t, --threshold N` | crap limit, default 30 |
 | `-f, --format text\|json\|csv` | output shape |
+| `--coverage-kind auto\|line\|branch` | what to weigh complexity against, default auto |
 | `--top N` / `--all` | how many rows to print |
 | `--exclude GLOB` | skip paths, repeatable |
 | `--no-default-excludes` | keep tests, build and vendor directories |
@@ -118,8 +122,15 @@ all, which the tool reads as untested. Both halves of the formula have to count 
 compile-time branches are branches. Preprocessor conditionals are the exception — the parser sees
 every `#if` arm but the coverage report only knows the one that was compiled.
 
-Coverage for a function is the share of its instrumented lines that ran, taken from the line data
-in the coverage report. Header-only and template code is measured the same way as anything else.
+Coverage is branch coverage when the report carries it, and line coverage otherwise — `auto`, the
+default. Branch is the honest pairing: complexity counts every `&&` as a decision point, so the
+coverage half has to check both of its outcomes. `if (a && b)` on one line is 100% line covered
+after a single test and 25% branch covered. Functions with no branches at all fall back to their
+line coverage, and the report says how many did. Header-only and template code is measured like
+anything else.
+
+Branch outcomes from a macro are counted at the line that used the macro, which is where lcov puts
+them, so a test suite built on assertion macros reads the same through either input format.
 
 Parsing is done by a small C++ tokenizer, not a compiler, so it needs no flags and no build system
 and it accepts code that will not compile. The trade-offs: function-like macros
