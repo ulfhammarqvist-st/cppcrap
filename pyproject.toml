@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cppcrap"
+version = "0.1.0"
+description = "Change Risk Anti-Patterns (CRAP) for C++ codebases"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[project.scripts]
+cppcrap = "cppcrap.cli:main"
+
+[tool.setuptools]
+packages = ["cppcrap"]
