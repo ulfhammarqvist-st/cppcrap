@@ -40,6 +40,12 @@ class Assessment:
         return self.score > self.threshold
 
     @property
+    def compile_time_only(self):
+        """A constexpr function the program never ran. Its work happened while it was compiled, and
+        a coverage report cannot see that; zero here is not a gap a test could close."""
+        return getattr(self.function, "compile_time", False) and self.measured and self.coverage == 0.0
+
+    @property
     def beyond_testing(self):
         return self.function.complexity > self.threshold
 

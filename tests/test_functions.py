@@ -124,3 +124,11 @@ class FunctionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompileTimeParseTest(unittest.TestCase):
+    def test_constexpr_is_recorded(self):
+        text = "constexpr int f(int a) { return a > 0 ? 1 : 2; }\nint g() { return 1; }\n"
+        parsed = {item.name: item for item in parse_source("/src/a.hpp", text)}
+        self.assertTrue(parsed["f"].compile_time)
+        self.assertFalse(parsed["g"].compile_time)

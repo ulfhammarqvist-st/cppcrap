@@ -39,7 +39,7 @@ def build_parser():
     parser.add_argument("--no-default-excludes", action="store_true")
     parser.add_argument("--min-complexity", type=int, default=1)
     parser.add_argument("--skip-unmeasured", action="store_true",
-                        help="ignore functions absent from the coverage data")
+                        help="ignore functions absent from the coverage data, and constexpr ones the program never ran, whose work happened while it was compiled")
     parser.add_argument("--assume-untested", action="store_true",
                         help="run without coverage and score every function as 0%% covered")
     parser.add_argument("--exit-zero", action="store_true", help="always exit 0")
@@ -103,7 +103,7 @@ def main(argv=None):
             "Files in the report: " + ", ".join(sorted(data.files)[:3]) + " ...",
         )
     if args.skip_unmeasured:
-        assessments = [item for item in assessments if item.measured]
+        assessments = [item for item in assessments if item.measured and not item.compile_time_only]
     root = os.getcwd()
     top = len(assessments) if args.all else args.top
     if args.format == "json":

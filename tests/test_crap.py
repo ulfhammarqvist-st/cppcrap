@@ -1,7 +1,7 @@
 import unittest
 
 from cppcrap import coverage
-from cppcrap.crap import affordable_complexity, assess, crap_score, required_coverage
+from cppcrap.crap import Assessment, affordable_complexity, assess, crap_score, required_coverage
 from cppcrap.functions import Function
 
 
@@ -68,3 +68,20 @@ class AssessTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompileTimeTest(unittest.TestCase):
+    def assess_one(self, compile_time, covered):
+        function = Function(
+            name="buildTable", path="/src/a.hpp", start_line=1, end_line=9,
+            complexity=3, compile_time=compile_time)
+        return Assessment(function=function, coverage=covered, measured=True, threshold=10)
+
+    def test_a_constexpr_function_the_program_never_ran_is_not_a_gap(self):
+        self.assertTrue(self.assess_one(True, 0.0).compile_time_only)
+
+    def test_a_constexpr_function_that_did_run_is_scored_as_usual(self):
+        self.assertFalse(self.assess_one(True, 0.4).compile_time_only)
+
+    def test_an_ordinary_uncovered_function_is_still_a_gap(self):
+        self.assertFalse(self.assess_one(False, 0.0).compile_time_only)

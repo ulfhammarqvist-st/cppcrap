@@ -28,6 +28,7 @@ class Function:
     start_line: int
     end_line: int
     complexity: int
+    compile_time: bool = False
 
     @property
     def lines(self):
@@ -102,6 +103,7 @@ class _Parser:
             start_line=start_line,
             end_line=end_line,
             complexity=complexity,
+            compile_time=any(token.value in ("constexpr", "consteval") for token in decl),
         ), end + 1
 
     def _find_body(self, index):
