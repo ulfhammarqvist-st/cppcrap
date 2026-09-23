@@ -100,9 +100,24 @@ class BranchTest(unittest.TestCase):
         data = coverage.parse(LCOV)
         self.assertEqual(data.range_coverage("/src/a.cpp", 4, 4, "branch"), (1.0, "line"))
 
-    def test_merge_adds_outcomes(self):
+    def test_merging_two_runs_does_not_double_the_branch(self):
         data = coverage.parse(LCOV).merge(coverage.parse(LCOV))
-        self.assertEqual(data.branches_for("/src/a.cpp")[1], (2, 4))
+        self.assertEqual(data.branches_for("/src/a.cpp")[1], (1, 2))
+
+    def test_merging_two_runs_combines_what_each_reached(self):
+        other = LCOV.replace("BRDA:1,0,0,3", "BRDA:1,0,0,-").replace("BRDA:1,0,1,0", "BRDA:1,0,1,7")
+        data = coverage.parse(LCOV).merge(coverage.parse(other))
+        self.assertEqual(data.branches_for("/src/a.cpp")[1], (2, 2))
+
+    def test_template_instantiations_are_one_source_branch(self):
+        # Three stampings of the same `while (a && b)`; only one run reached either outcome.
+        instantiated = """
+{"data": [{"files": [{"filename": "/src/a.cpp", "segments": [], "branches": [
+ [7, 10, 7, 20, 4, 1, 0, 0, 4], [7, 24, 7, 40, 4, 1, 0, 0, 4],
+ [7, 10, 7, 20, 0, 0, 0, 0, 4], [7, 24, 7, 40, 0, 0, 0, 0, 4],
+ [7, 10, 7, 20, 0, 0, 0, 0, 4], [7, 24, 7, 40, 0, 0, 0, 0, 4]]}]}]}
+"""
+        self.assertEqual(coverage.parse(instantiated).branches_for("/src/a.cpp"), {7: (4, 4)})
 
 
 class LookupTest(unittest.TestCase):

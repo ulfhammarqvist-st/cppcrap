@@ -32,18 +32,25 @@ class CoverageData:
             for line, count in hits.items():
                 target[line] = target.get(line, 0) + count
             self._index.setdefault(_key(path), []).append(path)
-        for path, outcomes in other.branches.items():
+        for path, regions in other.branches.items():
             target = self.branches.setdefault(path, {})
-            for line, (taken, total) in outcomes.items():
-                previous = target.get(line, (0, 0))
-                target[line] = (previous[0] + taken, previous[1] + total)
+            for region, counts in regions.items():
+                previous = target.get(region)
+                target[region] = counts if previous is None else tuple(map(sum, zip(previous, counts)))
         return self
 
     def lines_for(self, path):
         return self._lookup(self.files, path)
 
     def branches_for(self, path):
-        return self._lookup(self.branches, path)
+        regions = self._lookup(self.branches, path)
+        if regions is None:
+            return None
+        outcomes = {}
+        for region, counts in regions.items():
+            taken, total = outcomes.get(region[0], (0, 0))
+            outcomes[region[0]] = (taken + _taken(counts), total + len(counts))
+        return outcomes
 
     def _lookup(self, table, path):
         real = os.path.realpath(path)
@@ -71,14 +78,14 @@ class CoverageData:
         return Coverage(sum(1 for hits in relevant if hits > 0) / len(relevant), "line")
 
     def range_branches(self, path, start_line, end_line):
-        outcomes = self.branches_for(path)
-        if not outcomes:
+        regions = self._lookup(self.branches, path)
+        if not regions:
             return 0, 0
         taken = total = 0
-        for line, counts in outcomes.items():
-            if start_line <= line <= end_line:
-                taken += counts[0]
-                total += counts[1]
+        for region, counts in regions.items():
+            if start_line <= region[0] <= end_line:
+                taken += _taken(counts)
+                total += len(counts)
         return taken, total
 
 
@@ -122,8 +129,8 @@ def _parse_lcov(text):
             current[int(number)] = current.get(int(number), 0) + int(hits)
         elif line.startswith("BRDA:") and outcomes is not None:
             fields = line[5:].split(",")
-            number, taken = int(fields[0]), fields[-1]
-            _add_branch(outcomes, number, taken not in ("-", "0"), 1)
+            region = tuple(int(field) for field in fields[:-1])
+            outcomes[region] = (0 if fields[-1] in ("-", "0") else int(fields[-1]),)
         elif line.startswith("end_of_record"):
             current = outcomes = None
     return files, branches
@@ -142,15 +149,18 @@ def _parse_llvm_json(text):
 
 def _json_branches(entry, outcomes, site=None):
     for record in entry.get("branches", []):
-        _add_branch(outcomes, site or record[0], (record[4] > 0) + (record[5] > 0), 2)
+        # Every instantiation of a template repeats the same source region, so key on the region:
+        # one source branch stays one branch however many times the compiler stamped it out.
+        region = tuple(record[:4]) if site is None else (site,) + tuple(record[:4])
+        previous = outcomes.get(region, (0, 0))
+        outcomes[region] = (previous[0] + record[4], previous[1] + record[5])
     for expansion in entry.get("expansions", []):
         region = expansion.get("source_region") or [site]
         _json_branches(expansion, outcomes, region[0])
 
 
-def _add_branch(outcomes, line, taken, total):
-    previous = outcomes.get(line, (0, 0))
-    outcomes[line] = (previous[0] + taken, previous[1] + total)
+def _taken(counts):
+    return sum(1 for count in counts if count > 0)
 
 
 def _segments_to_lines(segments, hits):
@@ -212,7 +222,9 @@ def _parse_cobertura(text):
             hits[number] = max(hits.get(number, 0), int(line.get("hits", 0)))
             conditions = CONDITIONS.search(line.get("condition-coverage", ""))
             if conditions:
-                _add_branch(outcomes, number, int(conditions.group(1)), int(conditions.group(2)))
+                covered, total = int(conditions.group(1)), int(conditions.group(2))
+                for index in range(total):
+                    outcomes[(number, index)] = (1 if index < covered else 0,)
     return files, branches
 
 
@@ -223,7 +235,7 @@ def _parse_gcov(text):
     for line in text.splitlines():
         branch = GCOV_BRANCH.match(line.strip())
         if branch and outcomes is not None and number:
-            _add_branch(outcomes, number, 1 if (branch.group(2) or "0") != "0" else 0, 1)
+            outcomes[(number, len([key for key in outcomes if key[0] == number]))] = (int(branch.group(2) or 0),)
             continue
         match = GCOV_LINE.match(line)
         if not match:
