@@ -183,10 +183,20 @@ class _Parser:
                 elif token.value in DECISION_OPERATORS:
                     complexity += 1
             elif token.kind == "name" and token.value in DECISION_KEYWORDS:
-                complexity += 1
+                if not (token.value == "if" and self._is_constexpr_if(i)):
+                    complexity += 1
             i += 1
         last = self.tokens[-1]
         return self.n - 1, last.line, complexity
+
+    def _is_constexpr_if(self, index):
+        """True for `if constexpr`, whose branch the compiler picks -- no runtime path to test."""
+        nxt = index + 1
+        return (
+            nxt < self.n
+            and self.tokens[nxt].kind == "name"
+            and self.tokens[nxt].value == "constexpr"
+        )
 
     def _skip_balanced(self, index, opener, closer):
         depth = 0

@@ -77,7 +77,12 @@ class FunctionTest(unittest.TestCase):
         """
         self.assertEqual(parse(source)["f"].complexity, 10)
 
-    def test_compile_time_branches_count_too(self):
+    def test_compile_time_branches_do_not_count(self):
+        """`if constexpr` resolves at compile time, so no instantiation can take the other arm.
+
+        Counting them scored a dispatch table of 55 `else if constexpr` arms, fully exercised by
+        the suite, as the most complex function in the codebase.
+        """
         source = """
         template <typename T>
         int f(T x) {
@@ -87,7 +92,7 @@ class FunctionTest(unittest.TestCase):
             return 0;
         }
         """
-        self.assertEqual(parse(source)["f"].complexity, 4)
+        self.assertEqual(parse(source)["f"].complexity, 2)
 
     def test_lambda_complexity_lands_on_enclosing_function(self):
         source = "void f() { auto g = [](int x) { return x > 0 ? 1 : 0; }; }"
