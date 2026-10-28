@@ -117,5 +117,55 @@ class FunctionTest(unittest.TestCase):
         self.assertEqual(sorted(parse(source)), ["f", "main"])
 
 
+    def test_nested_template_owner(self):
+        self.assertIn("Map::find", parse("bool Map<Key<int>>::find() { return true; }"))
+
+    def test_operators_are_spelled_out(self):
+        source = """
+        void* operator new(unsigned long n) { return 0; }
+        struct C {
+            explicit operator bool() const { return true; }
+            operator const char*() const { return x ? "a" : "b"; }
+        };
+        """
+        functions = parse(source)
+        self.assertEqual(sorted(functions), ["C::operator bool", "C::operator const char*", "operator new"])
+        self.assertEqual(functions["C::operator const char*"].complexity, 2)
+
+    def test_qualifiers_between_signature_and_body(self):
+        source = """
+        struct C {
+            void f() & noexcept(sizeof(int) > 2) { }
+            auto g() -> decltype(h()) { return h(); }
+        };
+        """
+        self.assertEqual(sorted(parse(source)), ["C::f", "C::g"])
+
+    def test_extern_block_adds_no_scope(self):
+        self.assertEqual(list(parse('extern "C" { void f() {} }')), ["f"])
+
+    def test_namespace_scope_expressions_are_not_functions(self):
+        source = """
+        int n = items.size();
+        int m = ptr->size();
+        int y = f() ? 1 : 2;
+        int z = g() ? a(1) : b(2) + 3;
+        auto declared() -> int;
+        MACRO(x) int real() { return 0; }
+        (void)0;
+        """
+        self.assertEqual(list(parse(source)), ["real"])
+
+    def test_stray_closing_brace_is_ignored(self):
+        self.assertEqual(list(parse("} void f() {}")), ["f"])
+
+    def test_unterminated_body_runs_to_the_end(self):
+        function = parse("void f() {\n  if (x) {\n")["f"]
+        self.assertEqual((function.complexity, function.end_line), (2, 2))
+
+    def test_unbalanced_parameters_are_not_a_function(self):
+        self.assertEqual(parse("void f(int a"), {})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -27,6 +27,9 @@ class ScoreTest(unittest.TestCase):
         needed = required_coverage(10, 30)
         self.assertAlmostEqual(crap_score(10, needed), 30)
 
+    def test_no_complexity_needs_no_coverage(self):
+        self.assertEqual(required_coverage(0, 30), 0.0)
+
     def test_required_coverage_is_impossible_above_threshold(self):
         self.assertIsNone(required_coverage(31, 30))
 

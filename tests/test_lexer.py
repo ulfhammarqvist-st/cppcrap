@@ -47,5 +47,29 @@ class TokenizeTest(unittest.TestCase):
         self.assertEqual([token.kind for token in tokens], ["str", "str"])
 
 
+    def test_unterminated_block_comment_ends_the_input(self):
+        self.assertEqual(values("a /* b"), ["a"])
+
+    def test_line_comment_continues_over_a_backslash(self):
+        self.assertEqual(values("a // x \\\nb\nc"), ["a", "c"])
+
+    def test_directive_continues_over_a_backslash(self):
+        tokens = tokenize("#define X \\\n  1\nint y;")
+        self.assertEqual(tokens[0].kind, "preproc")
+        self.assertEqual([(token.value, token.line) for token in tokens[1:]], [("int", 3), ("y", 3), (";", 3)])
+
+    def test_escaped_newline_in_a_string_counts_the_line(self):
+        self.assertEqual(tokenize('"a\\\nb" c')[-1].line, 2)
+
+    def test_unterminated_raw_string_ends_the_input(self):
+        self.assertEqual([token.kind for token in tokenize('x R"d(if (y) {')], ["name", "str"])
+
+    def test_exponents_stay_in_the_number(self):
+        self.assertEqual(values("1.5e-3 + 0x1p+4 + .5"), ["1.5e-3", "+", "0x1p+4", "+", ".5"])
+
+    def test_unknown_characters_are_skipped(self):
+        self.assertEqual(values("a ` b"), ["a", "b"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -167,5 +167,11 @@ class CliTest(unittest.TestCase):
         self.assertIn("no C++ sources", err)
 
 
+    def test_a_source_can_be_a_single_file(self):
+        code, out, _ = self.run_cli(self.source, "-c", self.coverage, "--no-color")
+        self.assertEqual(code, 1)
+        self.assertIn("tangle", out)
+
+
 if __name__ == "__main__":
     unittest.main()

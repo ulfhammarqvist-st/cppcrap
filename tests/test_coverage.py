@@ -136,5 +136,44 @@ class LookupTest(unittest.TestCase):
         self.assertEqual(data.range_coverage("/src/a.cpp", 1, 1).value, 1.0)
 
 
+    def test_unknown_path_picks_the_closest_suffix(self):
+        data = coverage.parse(
+            "SF:/one/lib/a.cpp\nDA:1,1\nend_of_record\n"
+            "SF:/two/lib/a.cpp\nDA:1,0\nend_of_record\n"
+        )
+        self.assertEqual(data.range_coverage("/elsewhere/two/lib/a.cpp", 1, 1).value, 0.0)
+
+    def test_file_without_branches_falls_back_to_lines(self):
+        data = coverage.parse(LCOV)
+        self.assertEqual(data.range_coverage("/src/b.cpp", 1, 1, "branch"), (0.0, "line"))
+
+    def test_load_directory_ignores_other_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with open(os.path.join(directory, "notes.txt"), "w") as handle:
+                handle.write("not coverage")
+            self.assertFalse(coverage.load(directory))
+
+    def test_llvm_json_file_without_segments_has_no_lines(self):
+        data = coverage.parse('{"data": [{"files": [{"filename": "/src/a.cpp"}]}]}')
+        self.assertEqual(data.lines_for("/src/a.cpp"), {})
+
+    def test_cobertura_skips_classes_without_a_file(self):
+        text = COBERTURA.replace("<classes>", '<classes><class name="x"><lines><line number="1" hits="1"/></lines></class>')
+        data = coverage.parse(text)
+        self.assertEqual(len(data.files), 1)
+        self.assertEqual(data.lines_for("/src/a.cpp"), {1: 3, 2: 0, 4: 1})
+
+    def test_cobertura_resolves_against_an_existing_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            open(os.path.join(directory, "a.cpp"), "w").close()
+            text = COBERTURA.replace("<source>/src</source>", f"<source>/nowhere</source><source>{directory}</source>")
+            data = coverage.parse(text)
+            self.assertEqual(data.lines_for(os.path.join(directory, "a.cpp")), {1: 3, 2: 0, 4: 1})
+
+    def test_gcov_lines_before_a_source_are_ignored(self):
+        data = coverage.parse("        1:    1:stray\n" + GCOV, "a.cpp.gcov")
+        self.assertEqual(data.lines_for("/src/a.cpp"), {1: 3, 2: 0, 4: 1})
+
+
 if __name__ == "__main__":
     unittest.main()
