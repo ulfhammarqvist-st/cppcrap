@@ -235,7 +235,7 @@ def _declarator_name(decl):
         if decl[i].value != "::" or i == 0:
             break
         owner = i - 1
-        if decl[owner].value == ">":
+        if decl[owner].value in (">", ">>"):
             owner = _open_angle(decl, owner)
         if owner < 0 or decl[owner].kind != "name":
             break
@@ -249,8 +249,8 @@ def _declarator_name(decl):
 def _open_angle(decl, index):
     depth = 0
     while index >= 0:
-        if decl[index].value == ">":
-            depth += 1
+        if decl[index].value in (">", ">>"):
+            depth += len(decl[index].value)
         elif decl[index].value == "<":
             depth -= 1
             if depth == 0:
@@ -263,11 +263,23 @@ def _operator_name(decl):
     for index in range(len(decl) - 1, -1, -1):
         token = decl[index]
         if token.kind == "name" and token.value == "operator":
-            symbol = "".join(part.value for part in decl[index + 1:])
-            return "operator" + symbol
-        if token.kind != "op" and token.value not in ("new", "delete"):
+            return _spell(part.value for part in decl[index:])
+        if token.kind not in ("op", "name"):
             return None
     return None
+
+
+def _spell(words):
+    text = ""
+    for word in words:
+        if text and _is_word(text[-1]) and _is_word(word[0]):
+            text += " "
+        text += word
+    return text
+
+
+def _is_word(character):
+    return character.isalnum() or character == "_"
 
 
 def _qualify(scopes, name):
